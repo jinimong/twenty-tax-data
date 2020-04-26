@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>지니몽 현금영수증 처리 도구</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css">
+  <link href="https://fonts.googleapis.com/css?family=Nanum+Gothic|Nanum+Myeongjo&display=swap&subset=korean" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Nanum Gothic', sans-serif;
+      padding: 20px;
+      margin-left: 100px;
+      margin-right: 100px;
+    }
+    h2 {
+      margin-bottom: 30px;
+    }
+    .scrollable {
+      height: auto;
+      max-height: 350px;
+      overflow-x: hidden;
+    }
+    .scrollable thead th {
+      background-color: lightgray;
+      position: sticky;
+      top: 0;
+    }
+    th, td {
+      padding: 4px;
+      font-size: 11px;
+      text-align: center;
+    }
+    .delBtn {
+      opacity: 0;
+      text-align: center;
+    }
+    .delBtn:hover {
+      color: red;
+      cursor: pointer;
+      opacity: 1;
+    }
+    #help {
+      margin-top: 10px;
+    }
+    .collapse-btn {
+      color: #000;
+      text-decoration: none;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>
+    <a href="https://form.twenty.style/">트웬티</a> 엑셀파일을
+    <a href="https://taxadmin.uplus.co.kr:8004/receipt/receiptAdmitReq.jsp?pageNum=2&subNum=3">LGU+ 현금영수증</a> 업로드 파일로 변환하기
+  </h2>
+  <div class="mb-2">
+    <button class="btn btn-primary btn-sm" data-toggle="collapse" data-target="#help">도움말</button>
+    <ul id="help" class="collapse">
+      <li><b>xslx</b> 파일만 읽기 가능합니다.</li>
+      <li>행의 좌측에 마우스 오버 후 나타나는 <span style="color:red;">X</span> 버튼을 눌러서 삭제할 수 있습니다.</li>
+      <li>하나의 파일에서 최대 200개의 항목만 저장할 수 있습니다.</li>
+    </ul>
+  </div>
+  <hr>
+  
+  <div class="mb-2">
+    <a href="#base-info" class="collapse-btn" data-toggle="collapse">1. 기본 정보</a>
+    <div id="base-info" class="collapse show form-row mt-3">
+      <div class="col">
+        <label for="product">상품명:</label>
+        <input type="text" id="product" name="product" class="form-control" placeholder="고객이 구매한 상품 정보를 적어주세요" autofocus>
+      </div>
+      <div class="col">
+        <label for="phone">연락처:</label>
+        <input type="text" id="phone" name="phone" class="form-control" placeholder="사업자의 연락처를 하이픈(-)을 포함해서 적어주세요">
+      </div>
+    </div>
+  </div>
+  <hr>
+  <div class="mb-2">
+    <a href="#files" class="collapse-btn" data-toggle="collapse">2. 파일 읽어오기</a>
+    <div id="files" class="collapse show mt-3">
+      <input id="excel-upload" type="file" name="excel" accept=".xlsx" onchange="excelImport(event)">
+      <button class="ml-2" onclick="clearTable()">데이터 지우기</button>
+    </div>
+  </div>
+  <hr>
+  
+  <div id="info-description" class="mb-2"></div>
+  <div id="info-table" class="scrollable"></div>
+  
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.14.3/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.2/dist/FileSaver.min.js"></script>
+  <script>
+    const headerText = "H|거래일자|상품명|공급가액|부가세|봉사료|거래총액|거래자구분|주민번호/핸드폰/사업자번호|연락처";
+
+    const rightNow = new Date();
+    const today = rightNow.toISOString().slice(0,10).replace(/-/g,"");
+
+    window.addEventListener("load", function() {
+      // 로컬스토리지에 저장된 정보 있으면 불러오기
+      const productValue = localStorage.getItem("product");
+      const phoneValue = localStorage.getItem("phone");
+      document.getElementById("product").value = productValue;
+      document.getElementById("phone").value = phoneValue;
+
+      if (productValue === "" || phoneValue === "") {
+        $("#base-info").collapse("toggle");
+      }
+    });
+
+    // 필수데이터 입력 확인
+    document.getElementById("excel-upload").addEventListener("click", function() {
+      const product = document.getElementById("product").value;
+      const phone = document.getElementById("phone").value;
+      if (product === "" || phone === "") {
+        alert("필수정보를 입력하세요.");
+        event.preventDefault();
+      } else {
+        localStorage.setItem("product", product);
+        localStorage.setItem("phone", phone);
+      }
+    });
+
+    // json 데이터를 테이블로 변환하기
+    function jsonToHtmlTable(data) {
+      const table = document.createElement("table");
+      table.classList.add("table");
+      table.classList.add("table-hover");
+
+      for (obj of data) {
+        let row = table.insertRow();
+
+        // 삭제 버튼 추가
+        let delBtn = row.insertCell();
+        let delText = document.createElement("span");
+        delText.innerText = "X";
+        delText.classList.add("delBtn");
+        delText.addEventListener("click", function() {
+          const tr = event.currentTarget.parentNode.parentNode;
+          console.log('delete target!', tr);
+          tr.style.backgroundColor = "lightgray";
+          tr.style.opacity = 0;
+          tr.style.transition = "opacity 1000ms";
+          setTimeout(function() {
+            tr.remove();
+          }, 1000);
+        });
+        delBtn.appendChild(delText);
+
+        // 데이터 추가
+        Object.keys(obj).forEach(function(key) {
+          let cell = row.insertCell();
+          cell.appendChild(document.createTextNode(obj[key]));
+        });
+        let textArr = Object.keys(obj).map(k => obj[k]);
+        textArr[0] = "D"; // 주문자명의 위치에 rowType 을 넣어줌
+        row.dataset.text = textArr.join("|");
+      }
+
+      function addHeader(table, keys) {
+        let header = table.createTHead();
+        let row = header.insertRow();
+        let cell = document.createElement("th");
+        cell.appendChild(document.createTextNode(""));
+        row.append(cell);
+        for (key of keys) {
+          let cell = document.createElement("th");
+          cell.appendChild(document.createTextNode(key));
+          row.append(cell);
+        }
+      }
+      addHeader(table, headerText.split("|"));
+      return table;
+    }
+
+    // 데이터 비우기
+    function clearTable() {
+      // input 초기화
+      const inputFile = document.getElementById("excel-upload");
+      inputFile.value = "";
+
+      // 테이블 지우기
+      const table = document.getElementById("info-table");
+      table.innerHTML = "";
+
+      const description = document.getElementById("info-description");
+      description.innerHTML = "";
+    }
+
+    // 현금영수증 유형 번호 구하기
+    function getType(text) {
+      switch(text) {
+        case "개인 증빙용":
+          return 0;
+        case "사업자 증빙용":
+          return 1;
+        default:
+          alert("현금영수증 유형이 올바르지 않습니다.");
+      }
+    }
+
+    // 공급가액 구하기
+    function getSupplyValue(price) {
+      return parseInt(price - (price / 11));
+    }
+
+    // 부가세액 구하기
+    function getValueAddedTax(price) {
+      return price - getSupplyValue(price);
+    }
+
+    // 데이터 수 구하기
+    function getRowCnt() {
+      const rows = document.querySelectorAll("#info-table tbody > tr");
+      return rows.length;
+    }
+
+    // 엑셀파일 로드하기
+    function excelImport(event){
+      // 폴딩영역 접기
+      $("#base-info").collapse("hide");
+      $("#files").collapse("hide");
+
+      var input = event.target;
+      var reader = new FileReader();
+      reader.onload = function(){
+        const product = document.getElementById("product").value;
+        const phone = document.getElementById("phone").value;
+        var fileData = reader.result;
+        var wb = XLSX.read(fileData, {type : 'binary'});
+        // LGU+ 업로드 파일 양식 헤더
+        wb.SheetNames.forEach(function(sheetName){
+          let tableData = XLSX.utils.sheet_to_json(wb.Sheets[sheetName])
+            .filter(row => row["주문자명"] && row["현금영수증 유형"])
+            .map(row => ({
+              "name": row["주문자명"].trim(),
+              "date": today,
+              "product": product,
+              "supply": getSupplyValue(row["입금 금액"]),
+              "vat": getValueAddedTax(row["입금 금액"]),
+              "price1": 0,
+              "totalPrice": row["입금 금액"],
+              "type": getType(row["현금영수증 유형"]),
+              "number": row["현금영수증 번호"],
+              "sellerPhone": phone,
+            }));
+          document.getElementById("info-table").append(jsonToHtmlTable(tableData));
+
+          // 저장 버튼 & 설명
+          const text = document.createTextNode(`총 ${getRowCnt()}명의 데이터가 있습니다.`);
+          const saveBtn = document.createElement("button");
+          saveBtn.classList.add("btn");
+          saveBtn.classList.add("btn-primary");
+          saveBtn.classList.add("btn-sm");
+          saveBtn.classList.add("float-right");
+          saveBtn.innerText = "파일로 저장하기";
+          saveBtn.onclick = saveDataToFile;
+          document.getElementById("info-description").append(text);
+          document.getElementById("info-description").append(saveBtn);
+        });
+      };
+      if (input.files.length > 0) {
+        reader.readAsBinaryString(input.files[0]);
+      }
+    }
+
+    // 데이터 저장하기
+    function saveDataToFile() {
+      const resultArr = Array.prototype.map.call(
+        document.querySelectorAll("#info-table tbody > tr"),
+        row => row.dataset.text);
+      let idx = 1;
+      while(resultArr.length > 0) {
+        const partArr = resultArr.splice(0, 200);
+        partArr.unshift(headerText);
+        const blob = new Blob([partArr.join("\n"),], {
+          type: "text/plain;charset=utf-8"
+        });
+        const fileName = `${product.value}_${today}_${idx}.txt`;
+        saveAs(blob, fileName);
+        idx++;
+      }
+    }
+  </script>
+</body>
+</html>
