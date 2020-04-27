@@ -106,10 +106,22 @@
     const today = `${now.year}${now.month < 10 ? '0' + now.month : now.month}${now.day < 10 ? '0' + now.day : now.day}`;
 
     window.addEventListener("load", function() {
+      // 상품명에 입력에 정규식 처리
+      document.getElementById("product").addEventListener("input", function() {
+        var input = this;
+        var not = input.value.match(/[^a-zA-Z0-9_]+/g);
+        if (not) {
+          not.forEach(function(text) {
+            input.value = input.value.replace(text, "");
+          });
+        }
+      });
+
       // 로컬스토리지에 저장된 정보 있으면 불러오기
       const productValue = localStorage.getItem("product");
       const phoneValue = localStorage.getItem("phone");
       document.getElementById("product").value = productValue;
+      document.getElementById("product").dispatchEvent(new Event("input"));
       document.getElementById("phone").value = phoneValue;
 
       if (productValue === "" || phoneValue === "") {
