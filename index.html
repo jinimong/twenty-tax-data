@@ -98,7 +98,12 @@
     const headerText = "H|거래일자|상품명|공급가액|부가세|봉사료|거래총액|거래자구분|주민번호/핸드폰/사업자번호|연락처";
 
     const rightNow = new Date();
-    const today = rightNow.toISOString().slice(0,10).replace(/-/g,"");
+    const now = {
+      year: rightNow.getFullYear(),
+      month: rightNow.getMonth() + 1,
+      day: rightNow.getDate()
+    };
+    const today = `${now.year}${now.month < 10 ? '0' + now.month : now.month}${now.day < 10 ? '0' + now.day : now.day}`;
 
     window.addEventListener("load", function() {
       // 로컬스토리지에 저장된 정보 있으면 불러오기
