@@ -210,7 +210,7 @@
 
     // 공급가액 구하기
     function getSupplyValue(price) {
-      return parseInt(price - (price / 11));
+      return Math.round(price - (price / 11));
     }
 
     // 부가세액 구하기
