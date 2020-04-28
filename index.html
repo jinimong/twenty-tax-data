@@ -254,7 +254,7 @@
         // LGU+ 업로드 파일 양식 헤더
         wb.SheetNames.forEach(function(sheetName){
           let tableData = XLSX.utils.sheet_to_json(wb.Sheets[sheetName])
-            .filter(row => row["주문자명"] && row["현금영수증 유형"])
+            .filter(row => row["주문자명"] && row["현금영수증 번호"] && row["현금영수증 유형"])
             .map(row => ({
               "name": row["주문자명"].trim(),
               "date": today,
